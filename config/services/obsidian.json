@@ -1,0 +1,224 @@
+{
+  "id": "obsidian",
+  "name": "Obsidian",
+  "agentTypes": ["READ_WRITE"],
+  "requiredConfig": ["obsidian.vaultPath"],
+  "filesystem": {
+    "basePath": "obsidian.vaultPath",
+    "extension": ".md"
+  },
+  "cli": {
+    "executable": "obs",
+    "outputFormat": "text"
+  },
+  "tools": [
+    {
+      "name": "obsidian_readNote",
+      "description": "Read the content of a note from the vault",
+      "permission": "READ",
+      "filesystem": {
+        "operation": "read",
+        "path": "{notePath}"
+      },
+      "parameters": [
+        {
+          "name": "notePath",
+          "type": "string",
+          "required": true,
+          "description": "Path to the note (relative to vault root, e.g., 'folder/note' or 'note.md')"
+        }
+      ]
+    },
+    {
+      "name": "obsidian_searchNotes",
+      "description": "Search for notes by filename/title",
+      "permission": "READ",
+      "filesystem": {
+        "operation": "search",
+        "queryParam": "query",
+        "limitParam": "limit"
+      },
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Search query to match against note names"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "max": 100,
+          "default": 20,
+          "description": "Maximum number of results (default: 20)"
+        }
+      ]
+    },
+    {
+      "name": "obsidian_searchNoteContent",
+      "description": "Search within note content (full-text search)",
+      "permission": "READ",
+      "filesystem": {
+        "operation": "searchContent",
+        "queryParam": "query",
+        "limitParam": "limit"
+      },
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Text to search for within notes"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "max": 100,
+          "default": 20,
+          "description": "Maximum number of results (default: 20)"
+        }
+      ]
+    },
+    {
+      "name": "obsidian_getNotesInFolder",
+      "description": "List all notes in a specific folder",
+      "permission": "READ",
+      "filesystem": {
+        "operation": "list",
+        "path": "{folderPath}"
+      },
+      "parameters": [
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": true,
+          "description": "Path to the folder (relative to vault root)"
+        }
+      ]
+    },
+    {
+      "name": "obsidian_createNote",
+      "description": "Create a new note in the vault",
+      "permission": "WRITE",
+      "filesystem": {
+        "operation": "write",
+        "path": "{notePath}",
+        "contentParam": "content"
+      },
+      "parameters": [
+        {
+          "name": "notePath",
+          "type": "string",
+          "required": true,
+          "description": "Path for the new note (relative to vault root)"
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "description": "Content for the note"
+        }
+      ]
+    },
+    {
+      "name": "obsidian_updateNote",
+      "description": "Update (replace) the content of an existing note",
+      "permission": "WRITE",
+      "filesystem": {
+        "operation": "write",
+        "path": "{notePath}",
+        "contentParam": "content"
+      },
+      "parameters": [
+        {
+          "name": "notePath",
+          "type": "string",
+          "required": true,
+          "description": "Path to the note"
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "description": "New content for the note"
+        }
+      ]
+    },
+    {
+      "name": "obsidian_appendToNote",
+      "description": "Append content to an existing note",
+      "permission": "WRITE",
+      "filesystem": {
+        "operation": "append",
+        "path": "{notePath}",
+        "contentParam": "content"
+      },
+      "parameters": [
+        {
+          "name": "notePath",
+          "type": "string",
+          "required": true,
+          "description": "Path to the note"
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "description": "Content to append"
+        }
+      ]
+    },
+    {
+      "name": "obsidian_deleteNote",
+      "description": "Delete a note from the vault (use with caution)",
+      "permission": "WRITE",
+      "filesystem": {
+        "operation": "delete",
+        "path": "{notePath}"
+      },
+      "parameters": [
+        {
+          "name": "notePath",
+          "type": "string",
+          "required": true,
+          "description": "Path to the note to delete"
+        }
+      ]
+    },
+    {
+      "name": "obsidian_openNote",
+      "description": "Open a note in the Obsidian app",
+      "permission": "WRITE",
+      "cli": {
+        "command": "open",
+        "args": ["{notePath}"]
+      },
+      "parameters": [
+        {
+          "name": "notePath",
+          "type": "string",
+          "required": true,
+          "description": "Path to the note to open"
+        }
+      ]
+    },
+    {
+      "name": "obsidian_openVault",
+      "description": "Open the vault in the Obsidian app",
+      "permission": "WRITE",
+      "cli": {
+        "command": "open",
+        "flags": {
+          "vaultName": "--vault {vaultName}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "vaultName",
+          "type": "string",
+          "description": "Name of vault to open (uses configured vault if not specified)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "id": "imessage",
+  "name": "iMessage",
+  "generateReadWrite": false,
+  "requiredConfig": [],
+  "cli": {
+    "executable": "imsg",
+    "outputFormat": "jsonl",
+    "globalFlags": ["--json"]
+  },
+  "tools": [
+    {
+      "name": "imessage_listChats",
+      "description": "List recent iMessage/SMS conversations. Returns chat metadata including rowid (for use with getHistory), participants, and last message preview.",
+      "permission": "READ",
+      "cli": {
+        "command": "chats",
+        "flags": {
+          "limit": "--limit {limit}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "limit",
+          "type": "number",
+          "max": 100,
+          "default": 20,
+          "description": "Number of recent chats to list"
+        }
+      ]
+    },
+    {
+      "name": "imessage_getHistory",
+      "description": "Get message history for a specific chat. Returns messages with sender, timestamp, and content. Use chat rowid from listChats.",
+      "permission": "READ",
+      "cli": {
+        "command": "history",
+        "flags": {
+          "chatId": "--chat-id {chatId}",
+          "limit": "--limit {limit}",
+          "participants": "--participants {participants}",
+          "start": "--start {start}",
+          "end": "--end {end}",
+          "attachments": "--attachments"
+        }
+      },
+      "parameters": [
+        {
+          "name": "chatId",
+          "type": "number",
+          "required": true,
+          "description": "Chat rowid from imessage_listChats"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "max": 500,
+          "default": 50,
+          "description": "Maximum number of messages to retrieve"
+        },
+        {
+          "name": "participants",
+          "type": "string",
+          "description": "Filter by participant handle (phone/email)"
+        },
+        {
+          "name": "start",
+          "type": "string",
+          "description": "Start date (ISO8601 format, inclusive)"
+        },
+        {
+          "name": "end",
+          "type": "string",
+          "description": "End date (ISO8601 format, exclusive)"
+        },
+        {
+          "name": "attachments",
+          "type": "boolean",
+          "default": false,
+          "description": "Include attachment metadata in results"
+        }
+      ]
+    },
+    {
+      "name": "imessage_sendMessage",
+      "description": "Send an iMessage or SMS. Can send to a new contact by phone/email or reply to an existing chat by chat-id.",
+      "permission": "WRITE",
+      "cli": {
+        "command": "send",
+        "flags": {
+          "to": "--to {to}",
+          "chatId": "--chat-id {chatId}",
+          "text": "--text {text}",
+          "file": "--file {file}",
+          "service": "--service {service}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "to",
+          "type": "string",
+          "description": "Recipient phone number or email (for new conversations)"
+        },
+        {
+          "name": "chatId",
+          "type": "number",
+          "description": "Chat rowid to reply to (for existing conversations)"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "Message body text"
+        },
+        {
+          "name": "file",
+          "type": "string",
+          "description": "Path to attachment file"
+        },
+        {
+          "name": "service",
+          "type": "string",
+          "enum": ["imessage", "sms", "auto"],
+          "default": "auto",
+          "description": "Service to use: imessage, sms, or auto"
+        }
+      ]
+    }
+  ]
+}

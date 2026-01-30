@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+bun.lock
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Config with secrets
+.zaru/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/

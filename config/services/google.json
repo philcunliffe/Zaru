@@ -1,0 +1,672 @@
+{
+  "id": "google",
+  "name": "Google",
+  "generateReadWrite": false,
+  "requiredConfig": ["google.account"],
+  "cli": {
+    "executable": "gog",
+    "outputFormat": "json",
+    "globalFlags": ["--json"],
+    "globalConfig": {
+      "account": "google.account"
+    }
+  },
+  "tools": [
+    {
+      "name": "gmail_searchEmails",
+      "description": "Search emails using Gmail query syntax. Examples: 'is:unread', 'from:alice@example.com', 'subject:meeting', 'newer_than:7d'. Returns thread metadata (id, from, subject, labels).",
+      "permission": "READ",
+      "cli": {
+        "command": "gmail",
+        "args": ["search", "{query}"],
+        "flags": {
+          "max": "--max {max}"
+        }
+      },
+      "output": {
+        "extract": "threads"
+      },
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Gmail search query"
+        },
+        {
+          "name": "max",
+          "type": "number",
+          "max": 50,
+          "default": 10,
+          "description": "Max emails to return (default 10)"
+        }
+      ]
+    },
+    {
+      "name": "gmail_getEmail",
+      "description": "Get email metadata (headers, snippet, labels) by message ID. Use gmail_getEmailBody for full content.",
+      "permission": "READ",
+      "cli": {
+        "command": "gmail",
+        "args": ["get", "{messageId}", "--format", "metadata"]
+      },
+      "output": {
+        "omitFields": ["message.payload"]
+      },
+      "parameters": [
+        {
+          "name": "messageId",
+          "type": "string",
+          "required": true,
+          "description": "Gmail message ID"
+        }
+      ]
+    },
+    {
+      "name": "gmail_getEmailBody",
+      "description": "Get full email body content (truncated to 4000 chars). Use sparingly - prefer gmail_getEmail for metadata.",
+      "permission": "READ",
+      "cli": {
+        "command": "gmail",
+        "args": ["get", "{messageId}", "--format", "full"]
+      },
+      "output": {
+        "truncateFields": [
+          { "field": "body", "maxLength": 4000 }
+        ],
+        "omitFields": ["message.payload"]
+      },
+      "parameters": [
+        {
+          "name": "messageId",
+          "type": "string",
+          "required": true,
+          "description": "Gmail message ID"
+        }
+      ]
+    },
+    {
+      "name": "gmail_getThread",
+      "description": "Get email thread metadata (snippets, labels). Omits large message bodies - use gmail_getEmailBody for full content.",
+      "permission": "READ",
+      "cli": {
+        "command": "gmail",
+        "args": ["thread", "get", "{threadId}"]
+      },
+      "output": {
+        "extract": "thread",
+        "omitFields": ["messages.payload"]
+      },
+      "parameters": [
+        {
+          "name": "threadId",
+          "type": "string",
+          "required": true,
+          "description": "Gmail thread ID"
+        }
+      ]
+    },
+    {
+      "name": "gmail_listLabels",
+      "description": "List all available Gmail labels with message counts",
+      "permission": "READ",
+      "cli": {
+        "command": "gmail",
+        "args": ["labels", "list"]
+      },
+      "output": {
+        "extract": "labels"
+      },
+      "parameters": []
+    },
+    {
+      "name": "gmail_markAsRead",
+      "description": "Mark an email thread as read",
+      "permission": "READ",
+      "cli": {
+        "command": "gmail",
+        "args": ["labels", "modify", "{threadId}", "--remove", "UNREAD"]
+      },
+      "parameters": [
+        {
+          "name": "threadId",
+          "type": "string",
+          "required": true,
+          "description": "Gmail thread ID to mark as read"
+        }
+      ]
+    },
+    {
+      "name": "gmail_archive",
+      "description": "Archive an email thread (removes INBOX label)",
+      "permission": "READ",
+      "cli": {
+        "command": "gmail",
+        "args": ["labels", "modify", "{threadId}", "--remove", "INBOX"]
+      },
+      "parameters": [
+        {
+          "name": "threadId",
+          "type": "string",
+          "required": true,
+          "description": "Gmail thread ID to archive"
+        }
+      ]
+    },
+    {
+      "name": "gmail_sendEmail",
+      "description": "Send a new email",
+      "permission": "WRITE",
+      "cli": {
+        "command": "gmail",
+        "args": ["send"],
+        "flags": {
+          "to": "--to {to}",
+          "subject": "--subject {subject}",
+          "body": "--body {body}",
+          "cc": "--cc {cc}",
+          "bcc": "--bcc {bcc}",
+          "replyToMessageId": "--reply-to-message-id {replyToMessageId}",
+          "threadId": "--thread-id {threadId}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "to",
+          "type": "string[]",
+          "required": true,
+          "description": "Recipient email addresses"
+        },
+        {
+          "name": "subject",
+          "type": "string",
+          "required": true,
+          "description": "Email subject"
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": true,
+          "description": "Email body text"
+        },
+        {
+          "name": "cc",
+          "type": "string[]",
+          "description": "CC recipients"
+        },
+        {
+          "name": "bcc",
+          "type": "string[]",
+          "description": "BCC recipients"
+        },
+        {
+          "name": "replyToMessageId",
+          "type": "string",
+          "description": "Message ID to reply to"
+        },
+        {
+          "name": "threadId",
+          "type": "string",
+          "description": "Thread ID for threading"
+        }
+      ]
+    },
+    {
+      "name": "gmail_modifyLabels",
+      "description": "Add or remove labels on a thread",
+      "permission": "WRITE",
+      "cli": {
+        "command": "gmail",
+        "args": ["labels", "modify", "{threadId}"],
+        "flags": {
+          "addLabels": "--add {addLabels}",
+          "removeLabels": "--remove {removeLabels}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "threadId",
+          "type": "string",
+          "required": true,
+          "description": "Thread ID to modify"
+        },
+        {
+          "name": "addLabels",
+          "type": "string[]",
+          "description": "Labels to add"
+        },
+        {
+          "name": "removeLabels",
+          "type": "string[]",
+          "description": "Labels to remove"
+        }
+      ]
+    },
+    {
+      "name": "calendar_listEvents",
+      "description": "List calendar events within a time range",
+      "permission": "READ",
+      "cli": {
+        "command": "calendar",
+        "args": ["events", "list"],
+        "flags": {
+          "calendarId": "--calendar-id {calendarId}",
+          "timeMin": "--time-min {timeMin}",
+          "timeMax": "--time-max {timeMax}",
+          "maxResults": "--max-results {maxResults}",
+          "query": "--query {query}"
+        }
+      },
+      "output": {
+        "extract": "items"
+      },
+      "parameters": [
+        {
+          "name": "calendarId",
+          "type": "string",
+          "description": "Calendar ID (defaults to primary)"
+        },
+        {
+          "name": "timeMin",
+          "type": "string",
+          "description": "Start time (ISO 8601 format)"
+        },
+        {
+          "name": "timeMax",
+          "type": "string",
+          "description": "End time (ISO 8601 format)"
+        },
+        {
+          "name": "maxResults",
+          "type": "number",
+          "max": 100,
+          "default": 25,
+          "description": "Maximum number of events"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "description": "Text search query"
+        }
+      ]
+    },
+    {
+      "name": "calendar_getEvent",
+      "description": "Get a single calendar event by ID",
+      "permission": "READ",
+      "cli": {
+        "command": "calendar",
+        "args": ["events", "get", "{eventId}"],
+        "flags": {
+          "calendarId": "--calendar-id {calendarId}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "eventId",
+          "type": "string",
+          "required": true,
+          "description": "Event ID"
+        },
+        {
+          "name": "calendarId",
+          "type": "string",
+          "description": "Calendar ID (defaults to primary)"
+        }
+      ]
+    },
+    {
+      "name": "calendar_listCalendars",
+      "description": "List all calendars the user has access to",
+      "permission": "READ",
+      "cli": {
+        "command": "calendar",
+        "args": ["calendars", "list"]
+      },
+      "output": {
+        "extract": "items"
+      },
+      "parameters": []
+    },
+    {
+      "name": "contacts_listContacts",
+      "description": "List all contacts",
+      "permission": "READ",
+      "cli": {
+        "command": "contacts",
+        "args": ["list"],
+        "flags": {
+          "pageSize": "--page-size {pageSize}"
+        }
+      },
+      "output": {
+        "extract": "connections"
+      },
+      "parameters": [
+        {
+          "name": "pageSize",
+          "type": "number",
+          "max": 100,
+          "default": 50,
+          "description": "Number of contacts to return"
+        }
+      ]
+    },
+    {
+      "name": "contacts_searchContacts",
+      "description": "Search contacts by name, email, or phone",
+      "permission": "READ",
+      "cli": {
+        "command": "contacts",
+        "args": ["search", "{query}"],
+        "flags": {
+          "pageSize": "--page-size {pageSize}"
+        }
+      },
+      "output": {
+        "extract": "results"
+      },
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Search query"
+        },
+        {
+          "name": "pageSize",
+          "type": "number",
+          "max": 100,
+          "default": 20,
+          "description": "Maximum results"
+        }
+      ]
+    },
+    {
+      "name": "contacts_getContact",
+      "description": "Get a contact by resource name",
+      "permission": "READ",
+      "cli": {
+        "command": "contacts",
+        "args": ["get", "{resourceName}"]
+      },
+      "parameters": [
+        {
+          "name": "resourceName",
+          "type": "string",
+          "required": true,
+          "description": "Contact resource name (e.g., 'people/c123456')"
+        }
+      ]
+    },
+    {
+      "name": "drive_listFiles",
+      "description": "List files and folders in Google Drive",
+      "permission": "READ",
+      "cli": {
+        "command": "drive",
+        "args": ["files", "list"],
+        "flags": {
+          "folderId": "--parent {folderId}",
+          "query": "--query {query}",
+          "pageSize": "--page-size {pageSize}",
+          "orderBy": "--order-by {orderBy}"
+        }
+      },
+      "output": {
+        "extract": "files"
+      },
+      "parameters": [
+        {
+          "name": "folderId",
+          "type": "string",
+          "description": "Parent folder ID to list contents of"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "description": "Drive query string"
+        },
+        {
+          "name": "pageSize",
+          "type": "number",
+          "max": 100,
+          "default": 20,
+          "description": "Number of files to return"
+        },
+        {
+          "name": "orderBy",
+          "type": "string",
+          "description": "Sort order (e.g., 'modifiedTime desc')"
+        }
+      ]
+    },
+    {
+      "name": "drive_getFile",
+      "description": "Get file metadata by ID",
+      "permission": "READ",
+      "cli": {
+        "command": "drive",
+        "args": ["files", "get", "{fileId}"]
+      },
+      "parameters": [
+        {
+          "name": "fileId",
+          "type": "string",
+          "required": true,
+          "description": "File ID"
+        }
+      ]
+    },
+    {
+      "name": "drive_searchFiles",
+      "description": "Search for files by name",
+      "permission": "READ",
+      "cli": {
+        "command": "drive",
+        "args": ["files", "list"],
+        "flags": {
+          "query": "--query {query}",
+          "pageSize": "--page-size {pageSize}"
+        }
+      },
+      "output": {
+        "extract": "files"
+      },
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Search query (will be wrapped in name contains)"
+        },
+        {
+          "name": "pageSize",
+          "type": "number",
+          "max": 100,
+          "default": 20,
+          "description": "Maximum results"
+        }
+      ]
+    },
+    {
+      "name": "docs_getDocument",
+      "description": "Get a Google Doc by ID",
+      "permission": "READ",
+      "cli": {
+        "command": "docs",
+        "args": ["get", "{documentId}"]
+      },
+      "parameters": [
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "description": "Document ID"
+        }
+      ]
+    },
+    {
+      "name": "sheets_getSpreadsheet",
+      "description": "Get spreadsheet metadata",
+      "permission": "READ",
+      "cli": {
+        "command": "sheets",
+        "args": ["get", "{spreadsheetId}"]
+      },
+      "parameters": [
+        {
+          "name": "spreadsheetId",
+          "type": "string",
+          "required": true,
+          "description": "Spreadsheet ID"
+        }
+      ]
+    },
+    {
+      "name": "sheets_getSheetData",
+      "description": "Get data from a spreadsheet range",
+      "permission": "READ",
+      "cli": {
+        "command": "sheets",
+        "args": ["values", "get", "{spreadsheetId}", "{range}"]
+      },
+      "output": {
+        "extract": "values"
+      },
+      "parameters": [
+        {
+          "name": "spreadsheetId",
+          "type": "string",
+          "required": true,
+          "description": "Spreadsheet ID"
+        },
+        {
+          "name": "range",
+          "type": "string",
+          "required": true,
+          "description": "Range in A1 notation (e.g., 'Sheet1!A1:B10')"
+        }
+      ]
+    },
+    {
+      "name": "keep_listNotes",
+      "description": "List Google Keep notes",
+      "permission": "READ",
+      "cli": {
+        "command": "keep",
+        "args": ["notes", "list"],
+        "flags": {
+          "filter": "--filter {filter}",
+          "pageSize": "--page-size {pageSize}"
+        }
+      },
+      "output": {
+        "extract": "notes"
+      },
+      "parameters": [
+        {
+          "name": "filter",
+          "type": "string",
+          "description": "Filter expression"
+        },
+        {
+          "name": "pageSize",
+          "type": "number",
+          "max": 100,
+          "default": 20,
+          "description": "Number of notes to return"
+        }
+      ]
+    },
+    {
+      "name": "keep_getNote",
+      "description": "Get a Keep note by resource name",
+      "permission": "READ",
+      "cli": {
+        "command": "keep",
+        "args": ["notes", "get", "{noteName}"]
+      },
+      "parameters": [
+        {
+          "name": "noteName",
+          "type": "string",
+          "required": true,
+          "description": "Note resource name (e.g., 'notes/abc123')"
+        }
+      ]
+    },
+    {
+      "name": "chat_listSpaces",
+      "description": "List Google Chat spaces the user has access to",
+      "permission": "READ",
+      "cli": {
+        "command": "chat",
+        "args": ["spaces", "list"],
+        "flags": {
+          "filter": "--filter {filter}",
+          "pageSize": "--page-size {pageSize}"
+        }
+      },
+      "output": {
+        "extract": "spaces"
+      },
+      "parameters": [
+        {
+          "name": "filter",
+          "type": "string",
+          "description": "Filter expression"
+        },
+        {
+          "name": "pageSize",
+          "type": "number",
+          "max": 100,
+          "default": 20,
+          "description": "Number of spaces to return"
+        }
+      ]
+    },
+    {
+      "name": "chat_getMessages",
+      "description": "Get messages from a Google Chat space",
+      "permission": "READ",
+      "cli": {
+        "command": "chat",
+        "args": ["messages", "list", "{spaceName}"],
+        "flags": {
+          "pageSize": "--page-size {pageSize}",
+          "filter": "--filter {filter}",
+          "orderBy": "--order-by {orderBy}"
+        }
+      },
+      "output": {
+        "extract": "messages"
+      },
+      "parameters": [
+        {
+          "name": "spaceName",
+          "type": "string",
+          "required": true,
+          "description": "Space resource name (e.g., 'spaces/ABC123')"
+        },
+        {
+          "name": "pageSize",
+          "type": "number",
+          "max": 100,
+          "default": 20,
+          "description": "Number of messages to return"
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "description": "Filter expression"
+        },
+        {
+          "name": "orderBy",
+          "type": "string",
+          "description": "Sort order"
+        }
+      ]
+    }
+  ]
+}
