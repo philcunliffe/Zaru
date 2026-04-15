@@ -374,6 +374,7 @@ export interface ExplicitPermissions {
   makePayment: boolean;
   deleteContent: boolean;
   shareContent: boolean;
+  modifyCalendar: boolean;
 }
 
 /**

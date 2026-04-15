@@ -444,7 +444,7 @@ describe("User Intent Security System", () => {
           summary: "User wants to add sports game from emails to calendar",
           allowedDataSources: ["email"],
           allowedWriteDestinations: ["calendar"],
-          explicitlyAllowed: {},
+          explicitlyAllowed: { modifyCalendar: true },
           explicitlyForbidden: [],
           goals: ["add sports game to calendar"],
           constraints: [],

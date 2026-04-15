@@ -185,6 +185,133 @@ export class GoogleCalendarService extends GoogleBaseService {
   }
 
   // ==========================================================================
+  // Write Operations
+  // ==========================================================================
+
+  /**
+   * Create a new calendar event
+   *
+   * @param options - Event details
+   * @returns Created event
+   */
+  async createEvent(options: {
+    summary: string;
+    start: string;
+    end: string;
+    description?: string;
+    location?: string;
+    attendees?: string[];
+    calendarId?: string;
+  }): Promise<CalendarEvent> {
+    const args = ["events", "create"];
+    args.push("--summary", options.summary);
+    args.push("--start", options.start);
+    args.push("--end", options.end);
+    if (options.description) {
+      args.push("--description", options.description);
+    }
+    if (options.location) {
+      args.push("--location", options.location);
+    }
+    if (options.attendees) {
+      for (const attendee of options.attendees) {
+        args.push("--attendee", attendee);
+      }
+    }
+    if (options.calendarId) {
+      args.push("--calendar-id", options.calendarId);
+    }
+
+    const result = await this.execGog(args);
+    return this.parseEvent(result);
+  }
+
+  /**
+   * Update an existing calendar event
+   *
+   * @param eventId - Event ID to update
+   * @param updates - Fields to update (only specified fields are modified)
+   * @returns Updated event
+   */
+  async updateEvent(
+    eventId: string,
+    updates: {
+      summary?: string;
+      start?: string;
+      end?: string;
+      description?: string;
+      location?: string;
+      attendees?: string[];
+      calendarId?: string;
+    }
+  ): Promise<CalendarEvent> {
+    const args = ["events", "update", eventId];
+    if (updates.summary) {
+      args.push("--summary", updates.summary);
+    }
+    if (updates.start) {
+      args.push("--start", updates.start);
+    }
+    if (updates.end) {
+      args.push("--end", updates.end);
+    }
+    if (updates.description) {
+      args.push("--description", updates.description);
+    }
+    if (updates.location) {
+      args.push("--location", updates.location);
+    }
+    if (updates.attendees) {
+      for (const attendee of updates.attendees) {
+        args.push("--attendee", attendee);
+      }
+    }
+    if (updates.calendarId) {
+      args.push("--calendar-id", updates.calendarId);
+    }
+
+    const result = await this.execGog(args);
+    return this.parseEvent(result);
+  }
+
+  /**
+   * Delete a calendar event
+   *
+   * @param eventId - Event ID to delete
+   * @param calendarId - Calendar ID (optional, defaults to primary)
+   */
+  async deleteEvent(eventId: string, calendarId?: string): Promise<void> {
+    const args = ["events", "delete", eventId];
+    if (calendarId) {
+      args.push("--calendar-id", calendarId);
+    }
+
+    await this.execGog(args);
+  }
+
+  /**
+   * Respond to a calendar event invitation (RSVP)
+   *
+   * @param eventId - Event ID to respond to
+   * @param response - RSVP response: 'accepted', 'declined', or 'tentative'
+   * @param calendarId - Calendar ID (optional, defaults to primary)
+   * @returns Updated event
+   */
+  async rsvpEvent(
+    eventId: string,
+    response: "accepted" | "declined" | "tentative",
+    calendarId?: string
+  ): Promise<CalendarEvent> {
+    const args = ["events", "rsvp", eventId, "--response", response];
+    if (calendarId) {
+      args.push("--calendar-id", calendarId);
+    }
+
+    const result = await this.execGog(args);
+    return this.parseEvent(result);
+  }
+
+  // ==========================================================================
   // Parsing Helpers
   // ==========================================================================
 

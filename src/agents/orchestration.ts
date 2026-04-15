@@ -269,6 +269,20 @@ export class OrchestrationAgent {
 - Input: Receives encrypted content from READ agents (auto-decrypted)
 - Requires: Content from a READ agent routed to it first`,
 
+      "google-writer": `**GoogleWriter** (google-writer)
+- Permission: WRITE (can modify Google Calendar)
+- What it does: Creates, updates, deletes calendar events and responds to invitations
+
+**Calendar write tools (calendar_*):**
+- calendar_createEvent(summary, start, end, description?, location?, attendees?, calendarId?)
+- calendar_updateEvent(eventId, summary?, start?, end?, description?, location?, attendees?, calendarId?)
+- calendar_deleteEvent(eventId, calendarId?)
+- calendar_rsvpEvent(eventId, response, calendarId?) — response: "accepted", "declined", "tentative"
+
+- Input: Receives encrypted content from READ agents (auto-decrypted) for context
+- Requires: User intent must explicitly allow modifyCalendar
+- Cannot: Read calendar events (use google-reader for that)`,
+
       "browser-agent": `**BrowserAgent** (browser-agent)
 - Permission: READ_WRITE (can read web content AND submit forms)
 - What it does: Navigates websites, extracts content, fills and submits forms
@@ -367,7 +381,7 @@ When a task requires writing to an Obsidian vault, Google Doc, or web form, dele
             allowedDataSources: z.array(z.string())
               .describe("Data sources user wants to read from: email, calendar, web, documents, etc."),
             allowedWriteDestinations: z.array(z.string())
-              .describe("Destinations user wants to write to: google-docs, email-send, web-form, etc."),
+              .describe("Destinations user wants to write to: google-docs, email-send, web-form, calendar, etc."),
             explicitlyAllowed: z.object({
               sendEmail: z.boolean().describe("True only if user explicitly wants to send an email, false otherwise"),
               createDocument: z.boolean().describe("True only if user explicitly wants to create a document, false otherwise"),
@@ -375,6 +389,7 @@ When a task requires writing to an Obsidian vault, Google Doc, or web form, dele
               makePayment: z.boolean().describe("True only if user explicitly wants to make a payment, false otherwise"),
               deleteContent: z.boolean().describe("True only if user explicitly wants to delete content, false otherwise"),
               shareContent: z.boolean().describe("True only if user explicitly wants to share content, false otherwise"),
+              modifyCalendar: z.boolean().describe("True only if user explicitly wants to create, update, delete, or RSVP to calendar events, false otherwise"),
             }).describe("Explicit permissions for sensitive operations - set to false unless user clearly requests the action"),
             explicitlyForbidden: z.array(z.string())
               .describe("Operations the user explicitly does NOT want (e.g., 'don't send', 'don't delete')"),
@@ -711,6 +726,8 @@ You must extract the user's INTENT and create an execution plan. Intent extracti
 - Only set \`explicitlyAllowed\` flags to \`true\` if the user CLEARLY requests that action
 - "Summarize my emails" does NOT allow sending email
 - "Reply to John's email" DOES allow sending email
+- "What's on my calendar?" does NOT allow modifyCalendar
+- "Create a meeting" or "RSVP yes" DOES allow modifyCalendar
 - Be conservative - don't assume permissions not explicitly requested
 
 **Data Sources** - What the user wants to access:
@@ -764,11 +781,17 @@ Steps:
 2. route step-0 to gdocs-writer (inputPackageId: "step-0")
 3. respond to user
 
-"Find meeting email and RSVP yes":
-Intent: { category: "read_and_write", allowedDataSources: ["email"], allowedWriteDestinations: ["email-send"], explicitlyAllowed: { sendEmail: true } }
+"Create a meeting with Alice tomorrow at 2pm":
+Intent: { category: "write_only", allowedDataSources: [], allowedWriteDestinations: ["calendar"], explicitlyAllowed: { modifyCalendar: true } }
 Steps:
-1. gather from google-reader: "Find meeting invitation email"
-2. unknown: unknownReason="RSVP method depends on email content"
+1. delegate to google-writer: "Create calendar event with Alice tomorrow at 2pm"
+2. respond to user
+
+"RSVP yes to the team standup invitation":
+Intent: { category: "read_and_write", allowedDataSources: ["calendar"], allowedWriteDestinations: ["calendar"], explicitlyAllowed: { modifyCalendar: true } }
+Steps:
+1. gather from google-reader: "Find the team standup calendar invitation"
+2. unknown: unknownReason="Need event ID from calendar to RSVP"
 3. respond to user
 
 "Summarize my emails and iMessages and add them to an Obsidian note messages.md":
@@ -1530,7 +1553,7 @@ Output a JSON object with these fields:
 - summary: Brief description of user's goal (or "unclear" if canExtractIntent is false)
 - allowedDataSources: Array of data sources (e.g., ["email", "calendar"])
 - allowedWriteDestinations: Array of write destinations (e.g., ["google-docs", "calendar"])
-- explicitlyAllowed: { sendEmail, createDocument, submitForm, makePayment, deleteContent, shareContent } - only true if EXPLICITLY requested
+- explicitlyAllowed: { sendEmail, createDocument, submitForm, makePayment, deleteContent, shareContent, modifyCalendar } - only true if EXPLICITLY requested
 - explicitlyForbidden: Array of forbidden operations
 - goals: Array of specific goals
 - constraints: Array of constraints from the message

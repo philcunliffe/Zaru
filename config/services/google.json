@@ -667,6 +667,182 @@
           "description": "Sort order"
         }
       ]
+    },
+    {
+      "name": "calendar_createEvent",
+      "description": "Create a new calendar event",
+      "permission": "WRITE",
+      "cli": {
+        "command": "calendar",
+        "args": ["events", "create"],
+        "flags": {
+          "summary": "--summary {summary}",
+          "start": "--start {start}",
+          "end": "--end {end}",
+          "description": "--description {description}",
+          "location": "--location {location}",
+          "attendees": "--attendee {attendees}",
+          "calendarId": "--calendar-id {calendarId}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true,
+          "description": "Event title/summary"
+        },
+        {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "description": "Start time (ISO 8601 format, e.g., '2024-01-15T09:00:00-05:00') or date for all-day events ('2024-01-15')"
+        },
+        {
+          "name": "end",
+          "type": "string",
+          "required": true,
+          "description": "End time (ISO 8601 format) or date for all-day events"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "Event description/notes"
+        },
+        {
+          "name": "location",
+          "type": "string",
+          "description": "Event location"
+        },
+        {
+          "name": "attendees",
+          "type": "string[]",
+          "description": "Attendee email addresses"
+        },
+        {
+          "name": "calendarId",
+          "type": "string",
+          "description": "Calendar ID (defaults to primary)"
+        }
+      ]
+    },
+    {
+      "name": "calendar_updateEvent",
+      "description": "Update an existing calendar event. Only specified fields are modified.",
+      "permission": "WRITE",
+      "cli": {
+        "command": "calendar",
+        "args": ["events", "update", "{eventId}"],
+        "flags": {
+          "summary": "--summary {summary}",
+          "start": "--start {start}",
+          "end": "--end {end}",
+          "description": "--description {description}",
+          "location": "--location {location}",
+          "attendees": "--attendee {attendees}",
+          "calendarId": "--calendar-id {calendarId}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "eventId",
+          "type": "string",
+          "required": true,
+          "description": "Event ID to update"
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "description": "New event title/summary"
+        },
+        {
+          "name": "start",
+          "type": "string",
+          "description": "New start time (ISO 8601 format)"
+        },
+        {
+          "name": "end",
+          "type": "string",
+          "description": "New end time (ISO 8601 format)"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "New event description/notes"
+        },
+        {
+          "name": "location",
+          "type": "string",
+          "description": "New event location"
+        },
+        {
+          "name": "attendees",
+          "type": "string[]",
+          "description": "Updated attendee email addresses"
+        },
+        {
+          "name": "calendarId",
+          "type": "string",
+          "description": "Calendar ID (defaults to primary)"
+        }
+      ]
+    },
+    {
+      "name": "calendar_deleteEvent",
+      "description": "Delete a calendar event",
+      "permission": "WRITE",
+      "cli": {
+        "command": "calendar",
+        "args": ["events", "delete", "{eventId}"],
+        "flags": {
+          "calendarId": "--calendar-id {calendarId}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "eventId",
+          "type": "string",
+          "required": true,
+          "description": "Event ID to delete"
+        },
+        {
+          "name": "calendarId",
+          "type": "string",
+          "description": "Calendar ID (defaults to primary)"
+        }
+      ]
+    },
+    {
+      "name": "calendar_rsvpEvent",
+      "description": "Respond to a calendar event invitation (accept, decline, or tentatively accept)",
+      "permission": "WRITE",
+      "cli": {
+        "command": "calendar",
+        "args": ["events", "rsvp", "{eventId}"],
+        "flags": {
+          "response": "--response {response}",
+          "calendarId": "--calendar-id {calendarId}"
+        }
+      },
+      "parameters": [
+        {
+          "name": "eventId",
+          "type": "string",
+          "required": true,
+          "description": "Event ID to respond to"
+        },
+        {
+          "name": "response",
+          "type": "string",
+          "required": true,
+          "description": "RSVP response: 'accepted', 'declined', or 'tentative'"
+        },
+        {
+          "name": "calendarId",
+          "type": "string",
+          "description": "Calendar ID (defaults to primary)"
+        }
+      ]
     }
   ]
 }

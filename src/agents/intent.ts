@@ -109,6 +109,7 @@ export function buildUserIntentFromPlan(
     makePayment: llmOutput.explicitlyAllowed.makePayment ?? false,
     deleteContent: llmOutput.explicitlyAllowed.deleteContent ?? false,
     shareContent: llmOutput.explicitlyAllowed.shareContent ?? false,
+    modifyCalendar: llmOutput.explicitlyAllowed.modifyCalendar ?? false,
   };
 
   const permissions: IntentPermissions = {
@@ -164,6 +165,7 @@ export function createMinimalIntent(
         makePayment: false,
         deleteContent: false,
         shareContent: false,
+        modifyCalendar: false,
       },
       explicitlyForbidden: [],
     },
@@ -292,6 +294,15 @@ function checkExplicitPermission(
     return perms.deleteContent;
   if (normalizedOp.includes("share") || normalizedOp.includes("publish"))
     return perms.shareContent;
+  if (
+    normalizedOp.includes("calendar") ||
+    normalizedOp.includes("createevent") ||
+    normalizedOp.includes("create_event") ||
+    normalizedOp.includes("updateevent") ||
+    normalizedOp.includes("update_event") ||
+    normalizedOp.includes("rsvp")
+  )
+    return perms.modifyCalendar;
 
   return null; // Operation not in explicit permission list
 }
@@ -717,6 +728,15 @@ export function inferStepPermissions(
         if (taskLower.includes("document") || taskLower.includes("doc"))
           operations.push("createDocument");
         if (taskLower.includes("send")) operations.push("sendEmail");
+        if (
+          taskLower.includes("calendar") ||
+          taskLower.includes("event") ||
+          taskLower.includes("rsvp") ||
+          taskLower.includes("schedule")
+        ) {
+          writesTo.push("calendar");
+          operations.push("modifyCalendar");
+        }
       }
     }
   }
@@ -736,6 +756,21 @@ export function inferStepPermissions(
       if (step.targetAgentId?.includes("email")) {
         writesTo.push("email-send");
         operations.push("sendEmail");
+      }
+      if (step.targetAgentId?.includes("google")) {
+        // Google writer handles calendar write operations
+        if (step.task) {
+          const taskLower = step.task.toLowerCase();
+          if (
+            taskLower.includes("calendar") ||
+            taskLower.includes("event") ||
+            taskLower.includes("rsvp") ||
+            taskLower.includes("schedule")
+          ) {
+            writesTo.push("calendar");
+            operations.push("modifyCalendar");
+          }
+        }
       }
     }
   }
@@ -926,6 +961,21 @@ export function validateSubIntentAgainstOrchestrator(
   ) {
     errors.push(
       "Sub-intent expects deletion but user didn't explicitly allow deleteContent"
+    );
+  }
+
+  // If sub-intent expects calendar modification but user didn't allow it
+  if (
+    subIntent.expectedTools.some(
+      (t) =>
+        t.toLowerCase().includes("calendar") ||
+        t.toLowerCase().includes("event") ||
+        t.toLowerCase().includes("rsvp")
+    ) &&
+    !perms.modifyCalendar
+  ) {
+    errors.push(
+      "Sub-intent expects calendar modification but user didn't explicitly allow modifyCalendar"
     );
   }
 
