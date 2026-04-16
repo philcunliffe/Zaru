@@ -1,0 +1,670 @@
+{
+  "id": "github",
+  "name": "GitHub",
+  "generateReadWrite": false,
+  "requiredConfig": ["github.token"],
+  "service": {
+    "module": "services/github",
+    "class": "GithubService",
+    "configCheck": "isGithubConfigured"
+  },
+  "tools": [
+    {
+      "name": "github_listIssues",
+      "description": "List issues in a GitHub repository. Returns issue metadata (number, title, state, labels, assignees, author).",
+      "permission": "READ",
+      "method": "listIssues",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "enum": ["open", "closed", "all"],
+          "default": "open",
+          "description": "Issue state filter"
+        },
+        {
+          "name": "labels",
+          "type": "string",
+          "description": "Comma-separated list of label names to filter by"
+        },
+        {
+          "name": "assignee",
+          "type": "string",
+          "description": "Filter by assignee login, '*' for any, 'none' for unassigned"
+        },
+        {
+          "name": "creator",
+          "type": "string",
+          "description": "Filter by issue creator login"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "description": "Only issues updated at or after this time (ISO 8601)"
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "enum": ["created", "updated", "comments"],
+          "default": "created",
+          "description": "Sort field"
+        },
+        {
+          "name": "direction",
+          "type": "string",
+          "enum": ["asc", "desc"],
+          "default": "desc",
+          "description": "Sort direction"
+        },
+        {
+          "name": "per_page",
+          "type": "number",
+          "max": 100,
+          "default": 30,
+          "description": "Results per page (max 100)"
+        },
+        {
+          "name": "page",
+          "type": "number",
+          "min": 1,
+          "default": 1,
+          "description": "Page number (1-indexed)"
+        }
+      ]
+    },
+    {
+      "name": "github_getIssue",
+      "description": "Get full details of a single GitHub issue by number, including body, labels, assignees, and milestone.",
+      "permission": "READ",
+      "method": "getIssue",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "issue_number",
+          "type": "number",
+          "required": true,
+          "description": "Issue number"
+        }
+      ]
+    },
+    {
+      "name": "github_listPulls",
+      "description": "List pull requests in a GitHub repository. Returns PR metadata (number, title, state, head, base, draft, author).",
+      "permission": "READ",
+      "method": "listPulls",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "enum": ["open", "closed", "all"],
+          "default": "open",
+          "description": "Pull request state filter"
+        },
+        {
+          "name": "head",
+          "type": "string",
+          "description": "Filter by head branch in format 'user:branch' or 'org:branch'"
+        },
+        {
+          "name": "base",
+          "type": "string",
+          "description": "Filter by base branch name"
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "enum": ["created", "updated", "popularity", "long-running"],
+          "default": "created",
+          "description": "Sort field"
+        },
+        {
+          "name": "direction",
+          "type": "string",
+          "enum": ["asc", "desc"],
+          "default": "desc",
+          "description": "Sort direction"
+        },
+        {
+          "name": "per_page",
+          "type": "number",
+          "max": 100,
+          "default": 30,
+          "description": "Results per page (max 100)"
+        },
+        {
+          "name": "page",
+          "type": "number",
+          "min": 1,
+          "default": 1,
+          "description": "Page number (1-indexed)"
+        }
+      ]
+    },
+    {
+      "name": "github_getPull",
+      "description": "Get full details of a single pull request by number, including body, head/base refs, mergeable status, and review state.",
+      "permission": "READ",
+      "method": "getPull",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "pull_number",
+          "type": "number",
+          "required": true,
+          "description": "Pull request number"
+        }
+      ]
+    },
+    {
+      "name": "github_listPrComments",
+      "description": "List issue-style comments on a pull request (the conversation tab, not inline review comments).",
+      "permission": "READ",
+      "method": "listPullComments",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "pull_number",
+          "type": "number",
+          "required": true,
+          "description": "Pull request number"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "description": "Only comments updated at or after this time (ISO 8601)"
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "enum": ["created", "updated"],
+          "default": "created",
+          "description": "Sort field"
+        },
+        {
+          "name": "direction",
+          "type": "string",
+          "enum": ["asc", "desc"],
+          "default": "asc",
+          "description": "Sort direction"
+        },
+        {
+          "name": "per_page",
+          "type": "number",
+          "max": 100,
+          "default": 30,
+          "description": "Results per page (max 100)"
+        },
+        {
+          "name": "page",
+          "type": "number",
+          "min": 1,
+          "default": 1,
+          "description": "Page number (1-indexed)"
+        }
+      ]
+    },
+    {
+      "name": "github_searchIssues",
+      "description": "Search issues and pull requests across GitHub using the search API. Use qualifiers like 'repo:owner/name', 'is:open', 'author:user', 'label:bug'.",
+      "permission": "READ",
+      "method": "searchIssues",
+      "parameters": [
+        {
+          "name": "q",
+          "type": "string",
+          "required": true,
+          "description": "Search query with qualifiers (e.g., 'repo:octocat/hello-world is:open label:bug')"
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "enum": ["comments", "reactions", "interactions", "created", "updated"],
+          "description": "Sort field (default: best match)"
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "enum": ["asc", "desc"],
+          "default": "desc",
+          "description": "Sort direction"
+        },
+        {
+          "name": "per_page",
+          "type": "number",
+          "max": 100,
+          "default": 30,
+          "description": "Results per page (max 100)"
+        },
+        {
+          "name": "page",
+          "type": "number",
+          "min": 1,
+          "default": 1,
+          "description": "Page number (1-indexed)"
+        }
+      ]
+    },
+    {
+      "name": "github_getRepoReadme",
+      "description": "Get the README file for a repository (decoded to plain text).",
+      "permission": "READ",
+      "method": "getRepoReadme",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "ref",
+          "type": "string",
+          "description": "Git ref (branch, tag, or commit SHA) — defaults to default branch"
+        }
+      ]
+    },
+    {
+      "name": "github_listCommits",
+      "description": "List commits on a repository. Filter by branch (sha), file path, author, or date range.",
+      "permission": "READ",
+      "method": "listCommits",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "sha",
+          "type": "string",
+          "description": "Branch name, tag, or commit SHA to start listing from"
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "description": "Only commits containing this file path"
+        },
+        {
+          "name": "author",
+          "type": "string",
+          "description": "GitHub login or email address of commit author"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "description": "Only commits after this time (ISO 8601)"
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "description": "Only commits before this time (ISO 8601)"
+        },
+        {
+          "name": "per_page",
+          "type": "number",
+          "max": 100,
+          "default": 30,
+          "description": "Results per page (max 100)"
+        },
+        {
+          "name": "page",
+          "type": "number",
+          "min": 1,
+          "default": 1,
+          "description": "Page number (1-indexed)"
+        }
+      ]
+    },
+    {
+      "name": "github_commentIssue",
+      "description": "Post a new comment on an issue.",
+      "permission": "WRITE",
+      "method": "commentIssue",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "issue_number",
+          "type": "number",
+          "required": true,
+          "description": "Issue number"
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": true,
+          "description": "Comment body (Markdown supported)"
+        }
+      ]
+    },
+    {
+      "name": "github_commentPull",
+      "description": "Post a new conversation-tab comment on a pull request (not an inline review comment).",
+      "permission": "WRITE",
+      "method": "commentPull",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "pull_number",
+          "type": "number",
+          "required": true,
+          "description": "Pull request number"
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": true,
+          "description": "Comment body (Markdown supported)"
+        }
+      ]
+    },
+    {
+      "name": "github_closeIssue",
+      "description": "Close an open issue. Optionally provide a state_reason ('completed' or 'not_planned').",
+      "permission": "WRITE",
+      "method": "closeIssue",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "issue_number",
+          "type": "number",
+          "required": true,
+          "description": "Issue number"
+        },
+        {
+          "name": "state_reason",
+          "type": "string",
+          "enum": ["completed", "not_planned"],
+          "default": "completed",
+          "description": "Reason for closing the issue"
+        }
+      ]
+    },
+    {
+      "name": "github_reopenIssue",
+      "description": "Reopen a closed issue.",
+      "permission": "WRITE",
+      "method": "reopenIssue",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "issue_number",
+          "type": "number",
+          "required": true,
+          "description": "Issue number"
+        }
+      ]
+    },
+    {
+      "name": "github_addLabel",
+      "description": "Add one or more labels to an issue or pull request. Labels must already exist on the repository.",
+      "permission": "WRITE",
+      "method": "addLabel",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "issue_number",
+          "type": "number",
+          "required": true,
+          "description": "Issue or pull request number"
+        },
+        {
+          "name": "labels",
+          "type": "string[]",
+          "required": true,
+          "description": "Label names to add"
+        }
+      ]
+    },
+    {
+      "name": "github_createIssue",
+      "description": "Create a new issue in a repository.",
+      "permission": "WRITE",
+      "method": "createIssue",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "Issue title"
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "description": "Issue body (Markdown supported)"
+        },
+        {
+          "name": "labels",
+          "type": "string[]",
+          "description": "Label names to apply on creation"
+        },
+        {
+          "name": "assignees",
+          "type": "string[]",
+          "description": "GitHub logins to assign on creation"
+        },
+        {
+          "name": "milestone",
+          "type": "number",
+          "description": "Milestone number to associate"
+        }
+      ]
+    },
+    {
+      "name": "github_assignIssue",
+      "description": "Assign one or more users to an existing issue or pull request. Replaces any existing assignees.",
+      "permission": "WRITE",
+      "method": "assignIssue",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "issue_number",
+          "type": "number",
+          "required": true,
+          "description": "Issue or pull request number"
+        },
+        {
+          "name": "assignees",
+          "type": "string[]",
+          "required": true,
+          "description": "GitHub logins to assign"
+        }
+      ]
+    },
+    {
+      "name": "github_mergePull",
+      "description": "Merge an open pull request. REQUIRES USER APPROVAL before execution.",
+      "permission": "WRITE",
+      "method": "mergePull",
+      "parameters": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner (user or org)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name"
+        },
+        {
+          "name": "pull_number",
+          "type": "number",
+          "required": true,
+          "description": "Pull request number"
+        },
+        {
+          "name": "merge_method",
+          "type": "string",
+          "enum": ["merge", "squash", "rebase"],
+          "default": "merge",
+          "description": "Merge strategy"
+        },
+        {
+          "name": "commit_title",
+          "type": "string",
+          "description": "Title for the merge commit (merge/squash methods)"
+        },
+        {
+          "name": "commit_message",
+          "type": "string",
+          "description": "Extra detail to append to the merge commit message"
+        },
+        {
+          "name": "sha",
+          "type": "string",
+          "description": "SHA the PR head must match for merge to proceed (safety check)"
+        }
+      ]
+    }
+  ]
+}
