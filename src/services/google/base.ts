@@ -29,6 +29,9 @@ export interface ZaruConfig {
     vaultPath: string;
     cliPath?: string;
   };
+  github?: {
+    token?: string;
+  };
 }
 
 /**
