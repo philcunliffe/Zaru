@@ -28,6 +28,9 @@ import {
 } from "./approval";
 import type { ExecutionPlan, PlanStep, DecryptedContentResponse } from "../agents/types";
 import { getLogger, initLogger } from "../services/logger";
+import { initAuditLedger, getAuditLedger } from "../audit/ledger";
+import { sessionStarted, sessionEnded } from "../audit/events";
+import { setIntentAuditContext } from "../agents/intent";
 import type { EncryptedPackage, AgentMetadata } from "../agents/types";
 import type { KeyPair } from "../crypto";
 import { isGoogleConfigured, getGoogleAccount } from "../services/google/base";
@@ -72,6 +75,18 @@ async function initSession(): Promise<ChatSession> {
     "Orchestrator"
   );
   showSuccess("Orchestrator keys generated");
+
+  // Initialize audit ledger for this session
+  const sessionId = crypto.randomUUID();
+  initAuditLedger(sessionId);
+  getAuditLedger().append(
+    sessionStarted("user"),
+    "orchestrator",
+    orchestratorIdentity.keyPair.secretKey,
+  );
+
+  // Set signing context for intent validation audit events
+  setIntentAuditContext("orchestrator", orchestratorIdentity.keyPair.secretKey);
 
   // ============================================================================
   // Dynamic Agent Generation from JSON configs
@@ -691,8 +706,24 @@ async function handleCommand(
       break;
 
     case "quit":
-    case "exit":
+    case "exit": {
+      // Audit: session ended by user
+      try {
+        const ledger = getAuditLedger();
+        const orchAgent = getKeyRegistry().getAgent("orchestrator");
+        if (orchAgent) {
+          ledger.append(
+            sessionEnded("user_exit"),
+            "orchestrator",
+            orchAgent.keyPair.secretKey,
+          );
+        }
+        ledger.close();
+      } catch {
+        // fail-open
+      }
       return true;
+    }
 
     default:
       showError(`Unknown command: /${cmd}. Type /help for available commands.`);

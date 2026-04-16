@@ -34,6 +34,16 @@ import {
   type IntentValidationConfig,
 } from "./intent";
 import { getLogger } from "../services/logger";
+import { getAuditLedger } from "../audit/ledger";
+import {
+  planCreated,
+  stepValidated,
+  packageRouted,
+  packageDecrypted,
+  approvalRequested as approvalRequestedEvent,
+  approvalGranted as approvalGrantedEvent,
+  approvalDenied as approvalDeniedEvent,
+} from "../audit/events";
 
 /**
  * Available agent for orchestration
@@ -169,6 +179,16 @@ export class OrchestrationAgent {
     this.onRequestDecryptedContent = handlers.onRequestDecryptedContent;
     this.onPlanCreated = handlers.onPlanCreated;
     this.onRequestClarification = handlers.onRequestClarification;
+  }
+
+  /** Emit an audit event using the orchestrator's signing key (fail-open). */
+  private emitAudit(event: import("../audit/events").AuditEvent): void {
+    if (!this.context.secretKey) return;
+    try {
+      getAuditLedger().append(event, "orchestrator", this.context.secretKey);
+    } catch {
+      // fail-open
+    }
   }
 
   /**
@@ -953,6 +973,14 @@ IMPORTANT for READ_WRITE agents receiving routed content:
 
     this.context.currentPlan = plan;
 
+    // Audit: plan created
+    this.emitAudit(planCreated(
+      plan.id,
+      plan.requestHash,
+      plan.steps.length,
+      plan.steps.map((s) => s.id),
+    ));
+
     // Notify immediately after plan creation (before execution)
     if (this.onPlanCreated) {
       this.onPlanCreated(plan);
@@ -1129,6 +1157,14 @@ IMPORTANT for READ_WRITE agents receiving routed content:
           }
         }
 
+        // Audit: step validated for delegate
+        this.emitAudit(stepValidated(
+          plan.id,
+          step.id,
+          step.targetAgentId,
+          true,
+        ));
+
         // Determine output recipients based on the plan:
         // Find route steps that will receive this step's output
         const outputRecipients = ["user"];
@@ -1217,6 +1253,14 @@ IMPORTANT for READ_WRITE agents receiving routed content:
           }
         }
 
+        // Audit: step validated for route
+        this.emitAudit(stepValidated(
+          plan.id,
+          step.id,
+          step.targetAgentId,
+          true,
+        ));
+
         // Resolve inputPackageId - it may be a step reference or an actual package ID
         const resolvedPackageId = this.resolvePackageId(step.inputPackageId);
         const inputPkg = this.context.pendingPackages.get(resolvedPackageId);
@@ -1237,6 +1281,14 @@ IMPORTANT for READ_WRITE agents receiving routed content:
         // Track output for this step as well
         this.context.stepOutputPackages.set(step.id, resultPkg.id);
 
+        // Audit: package routed
+        this.emitAudit(packageRouted(
+          resolvedPackageId,
+          step.id,
+          step.id,
+          step.targetAgentId,
+        ));
+
         getLogger().logPermission({
           type: "package_routing",
           source: "orchestration",
@@ -1254,12 +1306,25 @@ IMPORTANT for READ_WRITE agents receiving routed content:
         });
         break;
 
-      case "approve":
+      case "approve": {
         // DEPRECATED: Approval steps are no longer needed.
         // Intent validation ensures actions match user expectations.
         // This case is kept for backward compatibility only.
         console.warn("[Orchestrator] 'approve' step type is deprecated - intent validation handles security");
+
+        // Audit: approval requested (even though deprecated, log for completeness)
+        const approvalId = crypto.randomUUID();
+        this.emitAudit(approvalRequestedEvent(
+          approvalId,
+          step.id,
+          "orchestrator",
+          step.targetAgentId || "user",
+          step.task || "Approval step (deprecated)",
+        ));
+        // Since deprecated steps are auto-skipped, emit grant
+        this.emitAudit(approvalGrantedEvent(approvalId, false));
         break;
+      }
 
       case "respond":
         // Find the last package and send to user
@@ -1289,6 +1354,14 @@ IMPORTANT for READ_WRITE agents receiving routed content:
             );
           }
         }
+
+        // Audit: step validated for gather
+        this.emitAudit(stepValidated(
+          plan.id,
+          step.id,
+          step.targetAgentId,
+          true,
+        ));
 
         // Similar to delegate, but we request the content to be added to context
         const gatherRegistry = getKeyRegistry();
@@ -1602,8 +1675,16 @@ Return only valid JSON.`,
     }
 
     try {
-      return openSealedBox(sealedBox, this.context.secretKey);
+      const content = openSealedBox(sealedBox, this.context.secretKey);
+
+      // Audit: package decrypted
+      this.emitAudit(packageDecrypted(pkg.id, "orchestrator", true));
+
+      return content;
     } catch (error) {
+      // Audit: package decryption failed
+      this.emitAudit(packageDecrypted(pkg.id, "orchestrator", false));
+
       console.error("[Orchestrator] Decryption failed:", error);
       return null;
     }

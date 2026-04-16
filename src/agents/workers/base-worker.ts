@@ -43,6 +43,14 @@ import {
 } from "../intent";
 import type { ReadWriteSecurityController } from "../read-write-security";
 import { getLogger } from "../../services/logger";
+import { getAuditLedger } from "../../audit/ledger";
+import { hashContent } from "../../crypto";
+import {
+  toolValidated as toolValidatedEvent,
+  escalationRequested as escalationRequestedEvent,
+  escalationResolved as escalationResolvedEvent,
+  packageEncrypted as packageEncryptedEvent,
+} from "../../audit/events";
 
 /**
  * Worker configuration received during initialization
@@ -114,6 +122,16 @@ export abstract class BaseAgentWorker {
 
   constructor() {
     this.setupMessageHandler();
+  }
+
+  /** Emit an audit event using this worker's signing key (fail-open). */
+  private emitAudit(event: import("../../audit/events").AuditEvent): void {
+    if (!this.config) return;
+    try {
+      getAuditLedger().append(event, this.config.agentId, this.config.secretKey);
+    } catch {
+      // fail-open
+    }
   }
 
   /**
@@ -354,7 +372,7 @@ export abstract class BaseAgentWorker {
       this.config.secretKey
     );
 
-    return {
+    const pkg = {
       id: crypto.randomUUID(),
       sourceAgentId: this.config.agentId,
       sealedBoxes,
@@ -362,6 +380,16 @@ export abstract class BaseAgentWorker {
       requestHash,
       createdAt: Date.now(),
     };
+
+    // Audit: package encrypted
+    this.emitAudit(packageEncryptedEvent(
+      pkg.id,
+      this.config.agentId,
+      allRecipientIds,
+      hashContent(content),
+    ));
+
+    return pkg;
   }
 
   /**
@@ -426,6 +454,14 @@ export abstract class BaseAgentWorker {
         timeoutId,
       });
 
+      // Audit: escalation requested
+      this.emitAudit(escalationRequestedEvent(
+        escalationId,
+        this.config?.agentId || "unknown",
+        reason,
+        this.currentTaskId || "",
+      ));
+
       // Send escalation message to parent
       const message: WorkerEscalationMessage = {
         type: "escalation",
@@ -453,6 +489,13 @@ export abstract class BaseAgentWorker {
     if (pending) {
       clearTimeout(pending.timeoutId);
       this.pendingEscalations.delete(escalationId);
+
+      // Audit: escalation resolved
+      this.emitAudit(escalationResolvedEvent(
+        escalationId,
+        resolution as "approved" | "denied" | "direct_response" | "timeout",
+        respondedBy,
+      ));
 
       pending.resolve({
         resolution,
@@ -510,6 +553,15 @@ export abstract class BaseAgentWorker {
             violations: result.violations,
           },
         });
+
+        // Audit: tool blocked by security controller
+        this.emitAudit(toolValidatedEvent(
+          this.config?.agentId || "unknown",
+          toolName,
+          false,
+          result.message,
+        ));
+
         throw new IntentViolationError(
           `Tool "${toolName}" blocked by security controller: ${result.message}`,
           result.errorCode || "UNAUTHORIZED_WRITE",
@@ -534,6 +586,13 @@ export abstract class BaseAgentWorker {
           },
         });
       }
+
+      // Audit: tool validated via security controller
+      this.emitAudit(toolValidatedEvent(
+        this.config?.agentId || "unknown",
+        toolName,
+        result.allowed || result.severity !== "block",
+      ));
 
       // Security controller handles both sub-intent and orchestrator validation
       return result.allowed || result.severity !== "block";
@@ -565,6 +624,15 @@ export abstract class BaseAgentWorker {
           violations: result.violations,
         },
       });
+
+      // Audit: tool blocked by intent validation
+      this.emitAudit(toolValidatedEvent(
+        this.config?.agentId || "unknown",
+        toolName,
+        false,
+        result.message,
+      ));
+
       throw new IntentViolationError(
         `Tool "${toolName}" blocked by intent validation: ${result.message}`,
         result.errorCode || "UNAUTHORIZED_WRITE",
@@ -589,6 +657,13 @@ export abstract class BaseAgentWorker {
         },
       });
     }
+
+    // Audit: tool validated via intent context
+    this.emitAudit(toolValidatedEvent(
+      this.config?.agentId || "unknown",
+      toolName,
+      result.allowed || result.severity !== "block",
+    ));
 
     return result.allowed || result.severity !== "block";
   }
