@@ -4,6 +4,9 @@
  * Command-line interface for interacting with the secure AI assistant.
  */
 
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 import * as readline from "readline";
 import { OrchestrationAgent } from "../agents/orchestration";
 import { getPackageRouter, initPackageRouter } from "../services/package-router";
@@ -29,6 +32,8 @@ import {
 import type { ExecutionPlan, PlanStep, DecryptedContentResponse } from "../agents/types";
 import { getLogger, initLogger } from "../services/logger";
 import { initAuditLedger, getAuditLedger } from "../audit/ledger";
+import { verifyAuditFile } from "../audit/verifier";
+import type { VerificationReport } from "../audit/verifier";
 import { sessionStarted, sessionEnded } from "../audit/events";
 import { setIntentAuditContext } from "../agents/intent";
 import type { EncryptedPackage, AgentMetadata } from "../agents/types";
@@ -598,6 +603,103 @@ function formatExecutionPlan(plan: ExecutionPlan): string {
 }
 
 /**
+ * Format a verification report for CLI display
+ */
+export function formatVerificationReport(report: VerificationReport): string {
+  const lines: string[] = [
+    "",
+    "┌─────────────────────────────────────────────────────────────┐",
+    "│                  AUDIT CHAIN VERIFICATION                   │",
+    "├─────────────────────────────────────────────────────────────┤",
+  ];
+
+  // Overall status
+  const statusIcon = report.valid ? "\x1b[32m✓ VALID\x1b[0m" : "\x1b[31m✗ INVALID\x1b[0m";
+  lines.push(`│ Status: ${statusIcon}                                            │`);
+  lines.push(`│ Total entries: ${String(report.totalEntries).padEnd(43)}│`);
+  lines.push("├─────────────────────────────────────────────────────────────┤");
+
+  // Chain integrity
+  const chainIcon = report.chainIntact
+    ? "\x1b[32m✓\x1b[0m intact"
+    : "\x1b[31m✗\x1b[0m BROKEN";
+  lines.push(`│ Hash chain: ${chainIcon.padEnd(51)}│`);
+
+  if (!report.chainIntact && report.firstBrokenLink !== null) {
+    lines.push(
+      `│   \x1b[31m⚠ First broken link at sequence ${report.firstBrokenLink}\x1b[0m${" ".repeat(Math.max(0, 24 - String(report.firstBrokenLink).length))}│`,
+    );
+  }
+
+  // Signature validity
+  const sigIcon = report.signaturesValid
+    ? "\x1b[32m✓\x1b[0m all valid"
+    : `\x1b[31m✗\x1b[0m ${report.invalidSignatures.length} failed`;
+  lines.push(`│ Signatures: ${sigIcon.padEnd(51)}│`);
+
+  if (!report.signaturesValid && report.invalidSignatures.length > 0) {
+    const seqList = report.invalidSignatures.slice(0, 10).join(", ");
+    const suffix = report.invalidSignatures.length > 10
+      ? ` (+${report.invalidSignatures.length - 10} more)`
+      : "";
+    lines.push(
+      `│   \x1b[31m⚠ Failed at: ${(seqList + suffix).slice(0, 43)}\x1b[0m${" ".repeat(Math.max(0, 43 - (seqList + suffix).length))}│`,
+    );
+  }
+
+  // Event breakdown
+  lines.push("├─────────────────────────────────────────────────────────────┤");
+  lines.push("│ Event Breakdown:                                            │");
+
+  const eventEntries = Object.entries(report.eventCounts)
+    .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0));
+
+  if (eventEntries.length === 0) {
+    lines.push("│   (no events)                                               │");
+  } else {
+    for (const [eventType, count] of eventEntries) {
+      const label = `  ${eventType}`;
+      const countStr = String(count ?? 0);
+      const padding = 59 - label.length - countStr.length - 1;
+      lines.push(`│${label}${" ".repeat(Math.max(1, padding))}${countStr} │`);
+    }
+  }
+
+  // Session summary
+  lines.push("├─────────────────────────────────────────────────────────────┤");
+  lines.push("│ Session Summary:                                            │");
+
+  const { sessionIds, actorIds, firstTimestamp, lastTimestamp } = report.sessionSummary;
+
+  if (sessionIds.length > 0) {
+    for (const sid of sessionIds) {
+      const truncated = sid.length > 50 ? sid.slice(0, 47) + "..." : sid;
+      lines.push(`│   Session: ${truncated.padEnd(47)}│`);
+    }
+  }
+
+  if (actorIds.length > 0) {
+    const actorList = actorIds.join(", ");
+    const truncated = actorList.length > 47 ? actorList.slice(0, 44) + "..." : actorList;
+    lines.push(`│   Actors:  ${truncated.padEnd(47)}│`);
+  }
+
+  if (firstTimestamp) {
+    const start = new Date(firstTimestamp).toLocaleString();
+    lines.push(`│   Start:   ${start.padEnd(47)}│`);
+  }
+  if (lastTimestamp) {
+    const end = new Date(lastTimestamp).toLocaleString();
+    lines.push(`│   End:     ${end.padEnd(47)}│`);
+  }
+
+  lines.push("└─────────────────────────────────────────────────────────────┘");
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+/**
  * Display help information
  */
 function showHelp(): void {
@@ -610,6 +712,7 @@ function showHelp(): void {
 │   /packages - List received encrypted packages              │
 │   /decrypt  - Decrypt and display the latest package        │
 │   /decrypt <id> - Decrypt a specific package                │
+│   /verify   - Verify audit chain integrity                  │
 │   /logs     - Show current log directory                    │
 │   /clear    - Clear the screen                              │
 │   /quit     - Exit the chat                                 │
@@ -692,7 +795,7 @@ async function handleCommand(
       }
       break;
 
-    case "logs":
+    case "logs": {
       const logger = getLogger();
       if (logger.isEnabled()) {
         showInfo(`Log directory: ${logger.getLogDir()}`);
@@ -700,6 +803,35 @@ async function handleCommand(
         showInfo("Logging is not enabled. Use --log flag to enable.");
       }
       break;
+    }
+
+    case "verify": {
+      const ledger = getAuditLedger();
+      if (!ledger.isEnabled()) {
+        showError("Audit ledger is not active. Enable logging with --log flag.");
+        break;
+      }
+
+      const sessionId = ledger.getSessionId();
+      const auditPath = path.join(
+        os.homedir(), ".zaru", "logs", sessionId, "audit.jsonl",
+      );
+
+      if (!fs.existsSync(auditPath)) {
+        showInfo("No audit entries recorded yet in this session.");
+        break;
+      }
+
+      try {
+        const report = verifyAuditFile(auditPath);
+        console.log(formatVerificationReport(report));
+      } catch (error) {
+        showError(
+          `Verification failed: ${error instanceof Error ? error.message : "unknown error"}`,
+        );
+      }
+      break;
+    }
 
     case "clear":
       console.clear();
