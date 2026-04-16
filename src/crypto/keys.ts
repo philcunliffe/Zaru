@@ -7,6 +7,10 @@
 import nacl from "tweetnacl";
 import { encodeBase64, decodeBase64 } from "tweetnacl-util";
 
+import type { AgentPermission } from "../agents/types";
+import { getAuditLedger } from "../audit/ledger";
+import { agentRegistered } from "../audit/events";
+
 /**
  * Key pair with base64-encoded keys
  */
@@ -58,10 +62,24 @@ export class KeyRegistry {
   /**
    * Register a new agent with generated keys
    */
-  registerAgent(id: string, name: string): AgentIdentity {
+  registerAgent(id: string, name: string, permission?: AgentPermission): AgentIdentity {
     const keyPair = generateKeyPair();
     const identity: AgentIdentity = { id, name, keyPair };
     this.agents.set(id, identity);
+
+    // Emit audit event when permission is known
+    if (permission) {
+      try {
+        getAuditLedger().append(
+          agentRegistered(id, name, permission, keyPair.publicKey),
+          id,
+          keyPair.secretKey,
+        );
+      } catch {
+        // fail-open: audit write failure must not block registration
+      }
+    }
+
     return identity;
   }
 

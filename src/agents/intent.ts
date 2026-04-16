@@ -8,6 +8,14 @@
 
 import { hashContent } from "../crypto";
 import { getLogger } from "../services/logger";
+import { getAuditLedger } from "../audit/ledger";
+import {
+  intentExtracted,
+  intentValidated,
+  intentBlocked,
+  securityWarning,
+  toolValidated as toolValidatedEvent,
+} from "../audit/events";
 import type {
   UserIntent,
   IntentCategory,
@@ -23,6 +31,35 @@ import type {
   IntentContext,
   ExplicitPermissions,
 } from "./types";
+
+// ============================================================================
+// Audit Signing Context (thread-local)
+// ============================================================================
+
+/**
+ * Module-level signing context for audit emissions.
+ * Set by the orchestrator (main thread) or worker (worker thread) during init.
+ * Each thread has its own module scope, so this is effectively thread-local.
+ */
+let _auditSigningContext: { actorId: string; signingKey: string } | null = null;
+
+/**
+ * Set the signing context for audit events emitted by intent validation.
+ * Call once during orchestrator or worker initialization.
+ */
+export function setIntentAuditContext(actorId: string, signingKey: string): void {
+  _auditSigningContext = { actorId, signingKey };
+}
+
+/** Emit an audit event if signing context is available (fail-open). */
+function emitAudit(event: import("../audit/events").AuditEvent): void {
+  if (!_auditSigningContext) return;
+  try {
+    getAuditLedger().append(event, _auditSigningContext.actorId, _auditSigningContext.signingKey);
+  } catch {
+    // fail-open
+  }
+}
 
 // ============================================================================
 // Configuration
@@ -119,7 +156,7 @@ export function buildUserIntentFromPlan(
     explicitlyForbidden: llmOutput.explicitlyForbidden,
   };
 
-  return {
+  const intent: UserIntent = {
     id: crypto.randomUUID(),
     originalMessage,
     messageHash,
@@ -136,6 +173,17 @@ export function buildUserIntentFromPlan(
     canExtractIntent: llmOutput.canExtractIntent ?? true,
     clarificationNeeded: llmOutput.clarificationNeeded,
   };
+
+  // Audit: intent extracted
+  emitAudit(intentExtracted(
+    intent.id,
+    messageHash,
+    intent.category,
+    intent.confidence,
+    intent.summary,
+  ));
+
+  return intent;
 }
 
 /**
@@ -426,6 +474,10 @@ export function validateStepAgainstIntent(
         message: "Step validated against intent",
       },
     });
+
+    // Audit: intent validated (no violations)
+    emitAudit(intentValidated(intent.id, step.id, true, []));
+
     return createValidationResult(true, "info", "Step validated against intent");
   }
 
@@ -495,6 +547,23 @@ export function validateStepAgainstIntent(
       hasReadViolation,
     },
   });
+
+  // Audit: intent validated (with violations) or blocked
+  if (severity === "block") {
+    emitAudit(intentBlocked(
+      intent.id,
+      step.id,
+      violations[0]?.code || "UNKNOWN",
+      `Intent validation found ${violations.length} issue(s)`,
+    ));
+  } else {
+    emitAudit(intentValidated(
+      intent.id,
+      step.id,
+      allowed,
+      violations.map((v) => ({ code: v.code, detail: v.detail })),
+    ));
+  }
 
   return result;
 }
@@ -598,6 +667,14 @@ export function validateToolAgainstIntent(
         message: `Tool "${toolName}" validated against intent`,
       },
     });
+
+    // Audit: tool validated (allowed)
+    emitAudit(toolValidatedEvent(
+      _auditSigningContext?.actorId || "unknown",
+      toolName,
+      true,
+    ));
+
     return createValidationResult(
       true,
       "info",
@@ -655,6 +732,14 @@ export function validateToolAgainstIntent(
       hasWriteViolation,
     },
   });
+
+  // Audit: security warning for tool violations
+  emitAudit(securityWarning(
+    "tool_intent_violation",
+    `Tool "${toolName}" validation found ${violations.length} issue(s)`,
+    _auditSigningContext?.actorId,
+    { toolName, violations: violations.map((v) => ({ code: v.code, detail: v.detail })) },
+  ));
 
   return result;
 }
