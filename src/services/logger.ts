@@ -46,7 +46,9 @@ export type PermissionLogType =
   | "user_approval"
   | "content_share"
   | "security_warning"
-  | "security_block";
+  | "security_block"
+  | "threat_score"
+  | "threat_confirmation";
 
 /**
  * Permission log entry structure

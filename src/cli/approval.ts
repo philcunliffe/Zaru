@@ -13,6 +13,7 @@ import type {
   EscalationApprovalRequest,
   EscalationApprovalResponse,
 } from "../agents/types";
+import type { PlanThreatScore } from "../scoring";
 import { getLogger } from "../services/logger";
 
 /**
@@ -599,6 +600,149 @@ export async function promptDecryptedContentShare(
         } else {
           console.log("Please enter 'y' (yes) or 'n' (no)");
           askQuestion();
+        }
+      });
+    };
+
+    askQuestion();
+  });
+}
+
+/**
+ * Prompt user for confirmation when a plan has a HIGH or CRITICAL threat score.
+ *
+ * HIGH tier: simple y/n confirmation.
+ * CRITICAL tier: requires typing "I understand the risks" to proceed.
+ *
+ * In non-interactive mode (piped stdin), auto-denies.
+ *
+ * @returns true if user confirms, false if denied
+ */
+export async function promptThreatConfirmation(
+  score: PlanThreatScore
+): Promise<boolean> {
+  if (!isInteractive()) {
+    console.log(`\n[Non-interactive mode] Auto-denying ${score.tier} threat plan`);
+    getLogger().logPermission({
+      type: "threat_confirmation",
+      source: "approval",
+      allowed: false,
+      severity: "warn",
+      details: {
+        tier: score.tier,
+        score: score.total,
+        reason: "Non-interactive mode - stdin is not a TTY",
+      },
+    });
+    return false;
+  }
+
+  const rl = createReadlineInterface();
+
+  const tierColor = "\x1b[31m"; // red for both HIGH and CRITICAL
+  const reset = "\x1b[0m";
+
+  console.log(`\n${tierColor}┌─────────────────────────────────────────────────────────────┐${reset}`);
+  console.log(`${tierColor}│              ⚠  ${score.tier.padEnd(8)} THREAT LEVEL DETECTED              │${reset}`);
+  console.log(`${tierColor}├─────────────────────────────────────────────────────────────┤${reset}`);
+  console.log(`${tierColor}│${reset} This plan has a threat score of ${score.total} (${score.tier}).`);
+  console.log(`${tierColor}│${reset}`);
+
+  // Show top factors
+  const topFactors = score.breakdown.slice(0, 5);
+  for (const factor of topFactors) {
+    console.log(`${tierColor}│${reset}  ${factor}`);
+  }
+  if (score.breakdown.length > 5) {
+    console.log(`${tierColor}│${reset}  ... and ${score.breakdown.length - 5} more factors`);
+  }
+
+  console.log(`${tierColor}├─────────────────────────────────────────────────────────────┤${reset}`);
+
+  if (score.tier === "CRITICAL") {
+    console.log(`${tierColor}│${reset} Type "I understand the risks" to proceed, or "n" to cancel. ${tierColor}│${reset}`);
+  } else {
+    console.log(`${tierColor}│${reset} Continue with this plan? [y/N]                              ${tierColor}│${reset}`);
+  }
+  console.log(`${tierColor}└─────────────────────────────────────────────────────────────┘${reset}\n`);
+
+  return new Promise((resolve) => {
+    const askQuestion = () => {
+      const prompt = score.tier === "CRITICAL"
+        ? "Confirm: "
+        : "Continue? [y/N]: ";
+
+      rl.question(prompt, (answer) => {
+        const trimmed = answer.trim();
+
+        if (score.tier === "CRITICAL") {
+          if (trimmed === "I understand the risks") {
+            rl.close();
+            getLogger().logPermission({
+              type: "threat_confirmation",
+              source: "approval",
+              allowed: true,
+              severity: "warn",
+              details: {
+                tier: score.tier,
+                score: score.total,
+                action: "confirmed_critical",
+              },
+            });
+            resolve(true);
+          } else if (trimmed.toLowerCase() === "n" || trimmed.toLowerCase() === "no") {
+            rl.close();
+            getLogger().logPermission({
+              type: "threat_confirmation",
+              source: "approval",
+              allowed: false,
+              severity: "info",
+              details: {
+                tier: score.tier,
+                score: score.total,
+                action: "denied",
+              },
+            });
+            resolve(false);
+          } else {
+            console.log('Type exactly "I understand the risks" or "n" to cancel');
+            askQuestion();
+          }
+        } else {
+          // HIGH tier: simple y/n, default to No
+          const normalized = trimmed.toLowerCase();
+          if (normalized === "y" || normalized === "yes") {
+            rl.close();
+            getLogger().logPermission({
+              type: "threat_confirmation",
+              source: "approval",
+              allowed: true,
+              severity: "info",
+              details: {
+                tier: score.tier,
+                score: score.total,
+                action: "confirmed",
+              },
+            });
+            resolve(true);
+          } else if (normalized === "n" || normalized === "no" || normalized === "") {
+            rl.close();
+            getLogger().logPermission({
+              type: "threat_confirmation",
+              source: "approval",
+              allowed: false,
+              severity: "info",
+              details: {
+                tier: score.tier,
+                score: score.total,
+                action: "denied",
+              },
+            });
+            resolve(false);
+          } else {
+            console.log("Please enter 'y' (yes) or 'n' (no)");
+            askQuestion();
+          }
         }
       });
     };

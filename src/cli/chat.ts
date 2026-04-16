@@ -23,6 +23,7 @@ import {
   promptClarification,
   promptDecryptedContentShare,
   promptEscalationApproval,
+  promptThreatConfirmation,
   showProgress,
   showSuccess,
   showError,
@@ -46,6 +47,7 @@ import {
   specToMetadata,
   type GeneratedAgentSpec,
 } from "../generation";
+import { formatThreatBreakdown, tierRequiresConfirmation } from "../scoring";
 
 /**
  * Chat session state
@@ -441,6 +443,11 @@ async function initSession(): Promise<ChatSession> {
       console.log(formatExecutionPlan(plan));
     },
 
+    onThreatConfirmation: async (plan) => {
+      if (!plan.threatScore) return true;
+      return promptThreatConfirmation(plan.threatScore);
+    },
+
     onRequestClarification: async (originalMessage: string, reason: string) => {
       // Log clarification request
       logger.logChat({
@@ -594,6 +601,12 @@ function formatExecutionPlan(plan: ExecutionPlan): string {
         lines.push(`│                    ${depsLines[j].padEnd(35)} │`);
       }
     }
+  }
+
+  // Append threat score breakdown if available
+  if (plan.threatScore) {
+    const threatLines = formatThreatBreakdown(plan.threatScore);
+    lines.push(...threatLines);
   }
 
   lines.push("└─────────────────────────────────────────────────────────────┘");

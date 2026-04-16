@@ -1,8 +1,8 @@
 /**
  * Scoring Module — Public API
  *
- * Re-exports weight constants, tier classification, and configuration
- * utilities for the threat scoring system.
+ * Re-exports weight constants, tier classification, configuration
+ * utilities, and the ThreatScorer for the threat scoring system.
  */
 
 export {
@@ -17,3 +17,11 @@ export {
   tierRequiresConfirmation,
   type ThreatTier,
 } from "./weights";
+
+export {
+  scoreStep,
+  scorePlan,
+  formatThreatBreakdown,
+  type StepThreatScore,
+  type PlanThreatScore,
+} from "./threat";

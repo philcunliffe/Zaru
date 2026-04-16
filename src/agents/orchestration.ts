@@ -34,6 +34,7 @@ import {
   type IntentValidationConfig,
 } from "./intent";
 import { getLogger } from "../services/logger";
+import { scorePlan, tierRequiresConfirmation } from "../scoring";
 import { getAuditLedger } from "../audit/ledger";
 import {
   planCreated,
@@ -121,6 +122,7 @@ export class OrchestrationAgent {
     persistToContext?: boolean
   ) => Promise<DecryptedContentResponse | null>;
   private onPlanCreated?: (plan: ExecutionPlan) => void;
+  private onThreatConfirmation?: (plan: ExecutionPlan) => Promise<boolean>;
   private onRequestClarification?: (
     originalMessage: string,
     reason: string
@@ -152,6 +154,7 @@ export class OrchestrationAgent {
       persistToContext?: boolean
     ) => Promise<DecryptedContentResponse | null>;
     onPlanCreated?: (plan: ExecutionPlan) => void;
+    onThreatConfirmation?: (plan: ExecutionPlan) => Promise<boolean>;
     onRequestClarification?: (
       originalMessage: string,
       reason: string
@@ -178,6 +181,7 @@ export class OrchestrationAgent {
     this.onSendToUser = handlers.onSendToUser;
     this.onRequestDecryptedContent = handlers.onRequestDecryptedContent;
     this.onPlanCreated = handlers.onPlanCreated;
+    this.onThreatConfirmation = handlers.onThreatConfirmation;
     this.onRequestClarification = handlers.onRequestClarification;
   }
 
@@ -970,6 +974,23 @@ IMPORTANT for READ_WRITE agents receiving routed content:
       replanCount: 0,
       userIntent,
     };
+
+    // Score the plan for threat display
+    plan.threatScore = scorePlan(plan, this.context.availableAgents);
+
+    // Log the threat score
+    getLogger().logPermission({
+      type: "threat_score",
+      source: "orchestration",
+      allowed: true,
+      severity: plan.threatScore.tier === "CRITICAL" || plan.threatScore.tier === "HIGH" ? "warn" : "info",
+      details: {
+        planId: plan.id,
+        score: plan.threatScore.total,
+        tier: plan.threatScore.tier,
+        breakdown: plan.threatScore.breakdown,
+      },
+    });
 
     this.context.currentPlan = plan;
 
@@ -1817,10 +1838,22 @@ Based on the decrypted content above, answer their question. Stay within the pre
           userIntent: preDecryptionIntent,
         };
 
+        // Score the plan
+        plan.threatScore = scorePlan(plan, this.context.availableAgents);
+
         this.context.currentPlan = plan;
 
         if (this.onPlanCreated) {
           this.onPlanCreated(plan);
+        }
+
+        // Check threat confirmation for HIGH/CRITICAL plans
+        if (plan.threatScore && tierRequiresConfirmation(plan.threatScore.tier) && this.onThreatConfirmation) {
+          const confirmed = await this.onThreatConfirmation(plan);
+          if (!confirmed) {
+            plan.status = "failed";
+            return "Plan cancelled due to threat level.";
+          }
         }
 
         await this.executePlan(plan);
@@ -2102,11 +2135,23 @@ REMEMBER: Your actions must stay within the pre-established intent boundaries.`,
               userIntent, // Use pre-decryption intent
             };
 
+            // Score the plan
+            plan.threatScore = scorePlan(plan, this.context.availableAgents);
+
             this.context.currentPlan = plan;
 
             // Notify about plan creation
             if (this.onPlanCreated) {
               this.onPlanCreated(plan);
+            }
+
+            // Check threat confirmation for HIGH/CRITICAL plans
+            if (plan.threatScore && tierRequiresConfirmation(plan.threatScore.tier) && this.onThreatConfirmation) {
+              const confirmed = await this.onThreatConfirmation(plan);
+              if (!confirmed) {
+                plan.status = "failed";
+                return "Plan cancelled due to threat level.";
+              }
             }
 
             // Execute the plan
@@ -2128,8 +2173,18 @@ REMEMBER: Your actions must stay within the pre-established intent boundaries.`,
       (tc) => tc.toolName !== "requestDecryptedContent"
     );
     if (otherToolsUsed.length > 0) {
-      // Create and execute plan
+      // Create and execute plan (scoring + onPlanCreated already handled inside)
       const plan = await this.createExecutionPlan(userMessage);
+
+      // Check threat confirmation for HIGH/CRITICAL plans
+      if (plan.threatScore && tierRequiresConfirmation(plan.threatScore.tier) && this.onThreatConfirmation) {
+        const confirmed = await this.onThreatConfirmation(plan);
+        if (!confirmed) {
+          plan.status = "failed";
+          return "Plan cancelled due to threat level.";
+        }
+      }
+
       await this.executePlan(plan);
       return ""; // Outcome summary already shown during execution
     }

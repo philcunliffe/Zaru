@@ -108,6 +108,8 @@ export interface ExecutionPlan {
   replanCount: number;
   // User intent extracted from the original request (security layer)
   userIntent?: UserIntent;
+  // Threat score computed from plan steps (security layer)
+  threatScore?: import("../scoring/threat").PlanThreatScore;
 }
 
 /**
