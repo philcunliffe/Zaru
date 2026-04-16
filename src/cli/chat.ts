@@ -48,6 +48,17 @@ import {
   type GeneratedAgentSpec,
 } from "../generation";
 import { formatThreatBreakdown, tierRequiresConfirmation } from "../scoring";
+import {
+  type PackageNotifierState,
+  type PackageNotifierConfig,
+  makePackageNotifierState,
+  recordPackageArrival,
+  flushPackageNotification,
+  clearUnread,
+  decrementUnread,
+} from "./package-notifier";
+
+const PACKAGE_NOTIFICATION_COALESCE_MS = 500;
 
 /**
  * Chat session state
@@ -57,6 +68,9 @@ interface ChatSession {
   orchestrator: OrchestrationAgent;
   receivedPackages: EncryptedPackage[];
   lastRequest: string;
+  notifier: PackageNotifierState;
+  notifierConfig: PackageNotifierConfig;
+  readonly unreadPackageCount: number;
 }
 
 /**
@@ -239,6 +253,15 @@ async function initSession(): Promise<ChatSession> {
   // Track received packages
   const receivedPackages: EncryptedPackage[] = [];
 
+  // Unread-package notifier. The default emit prints the message via
+  // console.log; runChat replaces it with a variant that also redraws the
+  // readline prompt so user input is preserved.
+  const notifier = makePackageNotifierState();
+  const notifierConfig: PackageNotifierConfig = {
+    coalesceWindowMs: PACKAGE_NOTIFICATION_COALESCE_MS,
+    emit: (message) => console.log(message),
+  };
+
   // Get logger for use in callbacks
   const logger = getLogger();
 
@@ -373,8 +396,10 @@ async function initSession(): Promise<ChatSession> {
     onSendToUser: async (pkg: EncryptedPackage) => {
       receivedPackages.push(pkg);
       try {
-        const display = decryptAndDisplay(pkg, userKeyPair, "");
-        console.log(formatDecryptedDisplay(display));
+        // Verify the package can be decrypted before notifying — surfaces
+        // failures immediately rather than at /decrypt time.
+        decryptAndDisplay(pkg, userKeyPair, "");
+        recordPackageArrival(notifier, pkg.id, notifierConfig);
       } catch (error) {
         showError(
           `Decryption failed: ${error instanceof Error ? error.message : "unknown error"}`
@@ -515,6 +540,11 @@ async function initSession(): Promise<ChatSession> {
     orchestrator,
     receivedPackages,
     lastRequest: "",
+    notifier,
+    notifierConfig,
+    get unreadPackageCount() {
+      return notifier.unreadCount;
+    },
   };
 }
 
@@ -760,10 +790,15 @@ async function handleCommand(
       break;
 
     case "packages":
+      // Surface any pending coalesced notification before the listing so the
+      // user sees the same count we're about to clear.
+      flushPackageNotification(session.notifier, session.notifierConfig);
       if (session.receivedPackages.length === 0) {
         showInfo("No encrypted packages received yet");
       } else {
-        console.log("\nReceived Packages:");
+        console.log(
+          `\nReceived Packages (${session.unreadPackageCount} unread):`
+        );
         for (const pkg of session.receivedPackages) {
           console.log(
             `  - ${pkg.id.slice(0, 8)}... from ${pkg.sourceAgentId} at ${new Date(pkg.createdAt).toLocaleString()}`
@@ -771,15 +806,19 @@ async function handleCommand(
         }
         console.log("");
       }
+      clearUnread(session.notifier);
       break;
 
     case "decrypt":
+      // Surface any pending coalesced notification first.
+      flushPackageNotification(session.notifier, session.notifierConfig);
       if (session.receivedPackages.length === 0) {
         showError("No packages to decrypt");
       } else {
         let pkg: EncryptedPackage | undefined;
+        const isSpecific = Boolean(args[0]);
 
-        if (args[0]) {
+        if (isSpecific) {
           // Find package by ID prefix
           pkg = session.receivedPackages.find((p) =>
             p.id.startsWith(args[0])
@@ -800,6 +839,11 @@ async function handleCommand(
             session.lastRequest
           );
           console.log(formatDecryptedDisplay(display));
+          if (isSpecific) {
+            decrementUnread(session.notifier);
+          } else {
+            clearUnread(session.notifier);
+          }
         } catch (error) {
           showError(
             `Decryption failed: ${error instanceof Error ? error.message : "unknown error"}`
@@ -944,6 +988,16 @@ export async function runChat(options: ChatOptions = { logEnabled: false }): Pro
     input: process.stdin,
     output: process.stdout,
   });
+
+  // Replace the notifier's emit so async package arrivals print on their own
+  // line and the active readline prompt is redrawn with the user's in-progress
+  // input preserved.
+  session.notifierConfig.emit = (message: string) => {
+    readline.cursorTo(process.stdout, 0);
+    readline.clearLine(process.stdout, 0);
+    process.stdout.write(`${message}\n`);
+    rl.prompt(true);
+  };
 
   const prompt = () => {
     rl.question("\x1b[36mYou:\x1b[0m ", async (input) => {
