@@ -25,7 +25,7 @@ import { GENESIS_HASH } from "./events";
  * The hash covers: sequence, timestamp, sessionId, previousHash, event,
  * actorId — serialized as a canonical JSON string.
  */
-function computeEntryHash(fields: {
+export function computeEntryHash(fields: {
   sequence: number;
   timestamp: string;
   sessionId: string;
