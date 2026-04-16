@@ -78,10 +78,10 @@ function createMockSubIntent(overrides?: Partial<AgentSubIntent>): AgentSubInten
     expectedToolCategories: ["navigate", "read", "write"],
     expectedTools: ["navigate", "getPageContent", "fillForm", "submitForm"],
     forbiddenOperations: ["sendEmail", "deleteContent"],
-    toolLimits: {
-      submitForm: 1,
-      navigate: 5,
-    },
+    toolLimits: [
+      { tool: "submitForm", maxCalls: 1 },
+      { tool: "navigate", maxCalls: 5 },
+    ],
     scope: {
       allowedDomains: ["example.com"],
       allowedFormActions: ["purchase", "buy"],
@@ -158,7 +158,7 @@ describe("ReadWriteSecurityController", () => {
       });
 
       (controller as any).subIntent = createMockSubIntent({
-        toolLimits: { submitForm: 1 },
+        toolLimits: [{ tool: "submitForm", maxCalls: 1 }],
       });
 
       // First call should succeed
@@ -293,7 +293,10 @@ describe("formatSubIntentForPrompt", () => {
 
   it("should include tool limits when present", () => {
     const subIntent = createMockSubIntent({
-      toolLimits: { submitForm: 1, navigate: 5 },
+      toolLimits: [
+        { tool: "submitForm", maxCalls: 1 },
+        { tool: "navigate", maxCalls: 5 },
+      ],
     });
     const formatted = formatSubIntentForPrompt(subIntent);
 

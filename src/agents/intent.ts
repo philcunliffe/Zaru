@@ -935,9 +935,9 @@ export function formatSubIntentForPrompt(subIntent: AgentSubIntent): string {
     lines.push(`**Forbidden**: ${subIntent.forbiddenOperations.join(", ")}`);
   }
 
-  if (Object.keys(subIntent.toolLimits).length > 0) {
-    const limits = Object.entries(subIntent.toolLimits)
-      .map(([tool, limit]) => `${tool}: ${limit}`)
+  if (subIntent.toolLimits.length > 0) {
+    const limits = subIntent.toolLimits
+      .map((tl) => `${tl.tool}: ${tl.maxCalls}`)
       .join(", ");
     lines.push(`**Tool Limits**: ${limits}`);
   }

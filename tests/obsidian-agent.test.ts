@@ -76,10 +76,10 @@ function createObsidianSubIntent(overrides?: Partial<AgentSubIntent>): AgentSubI
     expectedToolCategories: ["read"],
     expectedTools: ["searchNotes", "searchNoteContent", "readNote"],
     forbiddenOperations: ["deleteNote", "createNote", "updateNote"],
-    toolLimits: {
-      searchNotes: 5,
-      readNote: 10,
-    },
+    toolLimits: [
+      { tool: "searchNotes", maxCalls: 5 },
+      { tool: "readNote", maxCalls: 10 },
+    ],
     scope: {
       allowedPaths: ["projects/", "ideas/"],
     },
@@ -233,7 +233,7 @@ describe("Obsidian Agent Security Controller", () => {
 
       (controller as any).subIntent = createObsidianSubIntent({
         expectedToolCategories: ["read", "write", "navigate", "input"],
-        toolLimits: { readNote: 2 },
+        toolLimits: [{ tool: "readNote", maxCalls: 2 }],
         scope: {}, // Clear path restrictions for this test
       });
 
